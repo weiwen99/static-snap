@@ -10,6 +10,7 @@ object Versions {
   val scalatagsV      = "0.12.0"
   val scalaloggingV   = "3.9.5"
   val logbackClassicV = "1.4.14"
+  val scalatestV      = "3.2.18"
 }
 
 object app extends ScalaModule with ScalafmtModule with JavaAppPackagingModule {
@@ -46,4 +47,10 @@ object app extends ScalaModule with ScalafmtModule with JavaAppPackagingModule {
     ivy"ch.qos.logback:logback-classic:$logbackClassicV"
   )
 
+  object test extends ScalaTests with TestModule.ScalaTest {
+
+    def ivyDeps = Agg(
+      ivy"org.scalatest::scalatest:$scalatestV"
+    )
+  }
 }
