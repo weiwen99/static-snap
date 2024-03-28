@@ -11,6 +11,7 @@ object Versions {
   val scalaloggingV   = "3.9.5"
   val logbackClassicV = "1.4.14"
   val scalatestV      = "3.2.18"
+  val oslibV          = "0.9.3"
 }
 
 object app extends ScalaModule with ScalafmtModule with JavaAppPackagingModule {
@@ -50,7 +51,8 @@ object app extends ScalaModule with ScalafmtModule with JavaAppPackagingModule {
   object test extends ScalaTests with TestModule.ScalaTest {
 
     def ivyDeps = Agg(
-      ivy"org.scalatest::scalatest:$scalatestV"
+      ivy"org.scalatest::scalatest:$scalatestV",
+      ivy"com.lihaoyi::os-lib:$oslibV"
     )
   }
 }

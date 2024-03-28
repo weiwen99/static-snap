@@ -21,7 +21,7 @@ object Main
 
   override def main: Opts[IO[ExitCode]] = {
     (hostOpts, portOpts, rootOpts).mapN { (host, port, root) =>
-      val routes                 = SnapRouter[IO]().routes
+      val routes                 = SnapRouter[IO](root, "__").routes
       val runServer: IO[Unit] = SnapServer.build(routes, host, port).use(_ => IO.never)
       for {
         _ <- IO.delay(logger.info("server parameters: root = {}, host = {}, port = {}", root, host, port))
