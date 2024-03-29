@@ -31,7 +31,7 @@ object CmdOpts {
 
   given Argument[Path] = new Argument[Path] {
 
-     // 转化为 realpath 以检验路径是否存在
+    // 转化为 realpath 以检验路径是否存在
     def read(in: String) = Try(Paths.get(in).toRealPath()) match
       case Success(path)      => Validated.valid(path)
       case Failure(exception) => Validated.invalidNel(s"Invalid path: $in, exception: $exception")

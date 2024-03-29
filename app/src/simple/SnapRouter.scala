@@ -64,8 +64,8 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
       .getOrElseF(NotFound())
 
   private def listDir(path: NioPath) = {
-    val children: List[NioPath]       = java.nio.file.Files.list(path).toList().asScala.toList
-    val links: List[TypedTag[String]] = children
+    val children: List[NioPath] = java.nio.file.Files.list(path).toList().asScala.toList
+    val trs                     = children
       .map { d =>
         // 相对于根目录的路径
         val relativePath: NioPath = root.relativize(d)
@@ -73,7 +73,17 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
         val displayPath: NioPath  = path.relativize(d)
         // URL 编码后的路径，用于超链接
         val encoded: String       = "/" + urlEncodePath(relativePath)
-        p(a(href := encoded, displayPath.toString))
+        val size                  = d.toFile().length() match {
+          case s if s < 1024L                 => s"$s B"
+          case s if s < 1024L * 1024L         => s"${s / 1024L} KB"
+          case s if s < 1024L * 1024L * 1024L => s"${s / 1024L / 1024L} MB"
+          case s                              => s"${s / 1024L / 1024L / 1024L} GB"
+        }
+        val lastModified          = java.nio.file.Files.getLastModifiedTime(d).toInstant().atZone(java.time.ZoneId.systemDefault())
+        val formatter             = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+        val lastModifiedDisplayed = formatter.format(lastModified)
+        val typ                   = if (java.nio.file.Files.isDirectory(d)) "Directory" else "File"
+        tr(td(a(href := encoded, displayPath.toString)), td(size), td(lastModifiedDisplayed), td(typ))
       }
     html(
       lang := "zh-CN",
@@ -82,8 +92,11 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
         meta(name    := "viewport", content := "width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, minimum-scale=1"),
         tags2.title("Static Snap Server")
       ),
-      if (path != root) List(p(a(href := "../", "../"))) else List.empty[Modifier],
-      links
+      table(
+        tr(th("Name"), th("Size"), th("Last Modified"), th("Type")),
+        if (path != root) tr(td(a(href := "../", "../"))) else tr(),
+        tbody(trs)
+      )
     )
   }
 
