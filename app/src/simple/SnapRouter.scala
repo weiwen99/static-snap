@@ -85,6 +85,7 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
         val typ                   = if (java.nio.file.Files.isDirectory(d)) "Directory" else "File"
         tr(td(a(href := encoded, displayPath.toString)), td(size), td(lastModifiedDisplayed), td(typ))
       }
+    val displayedDir            = s"/${root.relativize(path)}"
     html(
       lang := "zh-CN",
       head(
@@ -93,10 +94,11 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
         link(rel     := "stylesheet", href  := "/__/static/css/materialize.min.css"),
         link(rel     := "stylesheet", href  := "/__/static/font/google-fonts-icon.css"),
         script(src   := "/__/static/js/materialize.min.js"),
-        tags2.title("Static Snap Server")
+        tags2.title(displayedDir)
       ),
       body(
         style := "padding: 0 1em 0 1em;",
+        h6(s"Index of $displayedDir"),
         table(
           cls := "striped",
           tr(th("Name"), th("Size"), th("Last Modified"), th("Type")),
