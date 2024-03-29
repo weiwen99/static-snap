@@ -95,11 +95,14 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
         script(src   := "/__/static/js/materialize.min.js"),
         tags2.title("Static Snap Server")
       ),
-      table(
-        cls := "striped",
-        tr(th("Name"), th("Size"), th("Last Modified"), th("Type")),
-        if (path != root) tr(td(a(href := "../", "../"))) else tr(),
-        tbody(trs)
+      body(
+        style := "padding: 0 1em 0 1em;",
+        table(
+          cls := "striped",
+          tr(th("Name"), th("Size"), th("Last Modified"), th("Type")),
+          if (path != root) tr(td(a(href := "../", "../"))) else tr(),
+          tbody(trs)
+        )
       )
     )
   }
