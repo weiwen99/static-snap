@@ -43,21 +43,25 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
     val decoded          = java.net.URLDecoder.decode(path.toString, StandardCharsets.UTF_8)
     // 将解码后的路径拼接到根路径下
     val nioPath: NioPath = Paths.get(root.toAbsolutePath.toString, decoded)
-    // 如果是目录，列出目录内容. 如果目录本身不存在，isDirectory(nioPath) 会返回 false
-    if (java.nio.file.Files.isDirectory(nioPath)) {
-      Ok(listDir(nioPath))
-    } else {
-      StaticFile
-        .fromPath(Fs2Path.fromNioPath(nioPath), request.some)
-        // 支持 Range 请求, 否则播放音视频无法任意快进
-        .map(_.putHeaders(`Accept-Ranges`.bytes))
-        // 如果文件不存在，返回 404 Not Found
-        .getOrElseF({
-          logger.error("resource {} not found", nioPath)
-          NotFound()
-        })
+    nioPath match {
+      // 如果文件不存在，返回 404 Not Found
+      case n if !java.nio.file.Files.exists(n)       => NotFound()
+      // 如果文件不在根目录下，返回 403 Forbidden. (虽然 URL path 理论上能阻止溢出根目录范围)
+      case n if !n.toAbsolutePath().startsWith(root) => Forbidden()
+      // 如果是目录，列出目录内容
+      case n if (java.nio.file.Files.isDirectory(n)) => Ok(listDir(nioPath))
+      // 如果是文件，返回文件内容
+      case n                                         => serveFile(n, request.some)
     }
   }
+
+  private def serveFile(path: NioPath, req: Option[Request[F]]) =
+    StaticFile
+      .fromPath(Fs2Path.fromNioPath(path), req)
+      // 支持 Range 请求, 否则播放音视频无法任意快进
+      .map(_.putHeaders(`Accept-Ranges`.bytes))
+      // 如果文件不存在，返回 404 Not Found. 这里仅仅是为了形式上的正确，因为前面已经处理了文件不存在的情况
+      .getOrElseF(NotFound())
 
   private def listDir(path: NioPath) = {
     val children: List[NioPath]       = java.nio.file.Files.list(path).toList().asScala.toList
