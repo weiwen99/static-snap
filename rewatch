@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+for p in $(ps -ef | grep simple.Main | grep static-snap | grep -v grep | awk '{print $2}')
+do
+  kill -9 $p
+done
+
+ mill -w app.run .
