@@ -90,9 +90,13 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
       head(
         meta(charset := "utf-8"),
         meta(name    := "viewport", content := "width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, minimum-scale=1"),
+        link(rel     := "stylesheet", href  := "/__/static/css/materialize.min.css"),
+        link(rel     := "stylesheet", href  := "/__/static/font/google-fonts-icon.css"),
+        script(src   := "/__/static/js/materialize.min.js"),
         tags2.title("Static Snap Server")
       ),
       table(
+        cls := "striped",
         tr(th("Name"), th("Size"), th("Last Modified"), th("Type")),
         if (path != root) tr(td(a(href := "../", "../"))) else tr(),
         tbody(trs)
