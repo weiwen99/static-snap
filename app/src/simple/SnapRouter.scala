@@ -78,6 +78,7 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
         meta(name    := "viewport", content := "width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1, minimum-scale=1"),
         tags2.title("Static Snap Server")
       ),
+      if (path != root) List(p(a(href := "../", "../"))) else List.empty[Modifier],
       links
     )
   }
