@@ -28,6 +28,8 @@ object OptionalSortByQueryParamMatcher extends OptionalQueryParamDecoderMatcher[
   */
 class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends Http4sDsl[F] with StrictLogging {
 
+  private val DEFAULT_SORT_BY: SortBy = SortBy(SortColumn.Name, SortOrder.Asc)
+
   require("metaPrefix".nonEmpty, "metaPrefix should not be empty")
 
   private val META_PREFIX: String = metaPrefix
@@ -45,7 +47,7 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
 
   // 列出目录内容或者返回文件
   private val mainR = HttpRoutes.of[F] { case request @ GET -> path :? OptionalSortByQueryParamMatcher(sortByOpt) =>
-    logger.debug("got sort parameter: {}", sortByOpt)
+    val sortBy           = sortByOpt.getOrElse(DEFAULT_SORT_BY)
     // 由于 path 被 URL 编码，所以需要 URL 解码
     val decoded          = java.net.URLDecoder.decode(path.toString, StandardCharsets.UTF_8)
     // 将解码后的路径拼接到根路径下
@@ -56,7 +58,7 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
       // 如果文件不在根目录下，返回 403 Forbidden. (虽然 URL path 理论上能阻止溢出根目录范围)
       case n if !n.toAbsolutePath().startsWith(root) => Forbidden()
       // 如果是目录，列出目录内容
-      case n if (java.nio.file.Files.isDirectory(n)) => Ok(listDir(nioPath))
+      case n if (java.nio.file.Files.isDirectory(n)) => Ok(listDir(nioPath, sortBy))
       // 如果是文件，返回文件内容
       case n                                         => serveFile(n, request.some)
     }
@@ -70,9 +72,9 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
       // 如果文件不存在，返回 404 Not Found. 这里仅仅是为了形式上的正确，因为前面已经处理了文件不存在的情况
       .getOrElseF(NotFound())
 
-  private def listDir(path: NioPath): TypedTag[String] = {
+  private def listDir(path: NioPath, sortBy: SortBy): TypedTag[String] = {
     val simpleDirName = s"/${root.relativize(path)}"
-    val trs           = FileService(root).listDir(path).map { f =>
+    val trs           = FileService(root).listDir(path, sortBy).map { f =>
       tr(
         td(a(href := f.href, f.name)),
         td(f.`type`),
