@@ -99,11 +99,27 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
         h6(s"Index of $simpleDirName"),
         table(
           cls := "striped",
-          tr(th("Name"), th("Type"), th("Size"), th("Last Modified"), th("Last Access"), th("Creation Time")),
+          tableHeaderOf(sortBy),
           if (path != root) tr(td(a(href := "../", "../"))) else tr(),
           tbody(trs)
         )
       )
+    )
+  }
+
+  def tableHeaderOf(sortBy: SortBy): TypedTag[String] = {
+    val arrow                    = sortBy.order match
+      case SortOrder.Asc  => "▲"
+      case SortOrder.Desc => "▼"
+    def thOf(column: SortColumn) =
+      th(
+        a(
+          href := s"?sort=$column:${if sortBy.column == column && sortBy.order == SortOrder.Asc then SortOrder.Desc else SortOrder.Asc}",
+          column.toString + (if sortBy.column == column then arrow else "")
+        )
+      )
+    tr(
+      List(SortColumn.Name, SortColumn.Type, SortColumn.Size, SortColumn.LastModified, SortColumn.LastAccess, SortColumn.Creation).map(thOf)
     )
   }
 
