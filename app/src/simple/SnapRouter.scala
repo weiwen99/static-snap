@@ -3,17 +3,23 @@ package simple
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Path => NioPath, Paths}
 
-import scala.jdk.CollectionConverters.*
-
 import cats.effect.kernel.Async
 import cats.implicits.*
 import com.typesafe.scalalogging.StrictLogging
 import fs2.io.file.{Files, Path => Fs2Path}
 import org.http4s._
 import org.http4s.dsl.Http4sDsl
+import org.http4s.dsl.impl.OptionalQueryParamDecoderMatcher
 import org.http4s.headers.{`Accept-Ranges`, `Content-Type`}
 import scalatags.Text.*
 import scalatags.Text.all.*
+
+import simple.FileMeta.*
+
+given QueryParamDecoder[SortBy] =
+  QueryParamDecoder[String].emap(s => SortBy.parseString(s).leftMap(t => ParseFailure(t, t)))
+
+object OptionalSortByQueryParamMatcher extends OptionalQueryParamDecoderMatcher[SortBy]("sort")
 
 /** @param root
   *   提供服务的文件系统根目录
@@ -21,6 +27,8 @@ import scalatags.Text.all.*
   *   元信息 API 的前缀. 比如, 如果 metaPrefix 为 "__", 则元信息 API 为 `/__/status`
   */
 class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends Http4sDsl[F] with StrictLogging {
+
+  private val DEFAULT_SORT_BY: SortBy = SortBy(SortColumn.Name, SortOrder.Asc)
 
   require("metaPrefix".nonEmpty, "metaPrefix should not be empty")
 
@@ -38,7 +46,8 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
   }
 
   // 列出目录内容或者返回文件
-  private val mainR = HttpRoutes.of[F] { case request @ GET -> path =>
+  private val mainR = HttpRoutes.of[F] { case request @ GET -> path :? OptionalSortByQueryParamMatcher(sortByOpt) =>
+    val sortBy           = sortByOpt.getOrElse(DEFAULT_SORT_BY)
     // 由于 path 被 URL 编码，所以需要 URL 解码
     val decoded          = java.net.URLDecoder.decode(path.toString, StandardCharsets.UTF_8)
     // 将解码后的路径拼接到根路径下
@@ -49,7 +58,7 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
       // 如果文件不在根目录下，返回 403 Forbidden. (虽然 URL path 理论上能阻止溢出根目录范围)
       case n if !n.toAbsolutePath().startsWith(root) => Forbidden()
       // 如果是目录，列出目录内容
-      case n if (java.nio.file.Files.isDirectory(n)) => Ok(listDir(nioPath))
+      case n if (java.nio.file.Files.isDirectory(n)) => Ok(listDir(nioPath, sortBy))
       // 如果是文件，返回文件内容
       case n                                         => serveFile(n, request.some)
     }
@@ -63,29 +72,18 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
       // 如果文件不存在，返回 404 Not Found. 这里仅仅是为了形式上的正确，因为前面已经处理了文件不存在的情况
       .getOrElseF(NotFound())
 
-  private def listDir(path: NioPath) = {
-    val children: List[NioPath] = java.nio.file.Files.list(path).toList().asScala.toList
-    val trs                     = children
-      .map { d =>
-        // 相对于根目录的路径
-        val relativePath: NioPath = root.relativize(d)
-        // 相对于父级目录的路径，为了显示的简介性
-        val displayPath: NioPath  = path.relativize(d)
-        // URL 编码后的路径，用于超链接
-        val encoded: String       = "/" + urlEncodePath(relativePath)
-        val size                  = d.toFile().length() match {
-          case s if s < 1024L                 => s"$s B"
-          case s if s < 1024L * 1024L         => s"${s / 1024L} KB"
-          case s if s < 1024L * 1024L * 1024L => s"${s / 1024L / 1024L} MB"
-          case s                              => s"${s / 1024L / 1024L / 1024L} GB"
-        }
-        val lastModified          = java.nio.file.Files.getLastModifiedTime(d).toInstant().atZone(java.time.ZoneId.systemDefault())
-        val formatter             = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-        val lastModifiedDisplayed = formatter.format(lastModified)
-        val typ                   = if (java.nio.file.Files.isDirectory(d)) "Directory" else "File"
-        tr(td(a(href := encoded, displayPath.toString)), td(size), td(lastModifiedDisplayed), td(typ))
-      }
-    val displayedDir            = s"/${root.relativize(path)}"
+  private def listDir(path: NioPath, sortBy: SortBy): TypedTag[String] = {
+    val simpleDirName = s"/${root.relativize(path)}"
+    val trs           = FileService(root).listDir(path, sortBy).map { f =>
+      tr(
+        td(a(href := f.href, f.name)),
+        td(f.`type`),
+        td(f.humanSize),
+        td(f.lastModifiedTime.formatted),
+        td(f.lastAccessTime.formatted),
+        td(f.creationTime.formatted)
+      )
+    }
     html(
       lang := "zh-CN",
       head(
@@ -94,14 +92,14 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
         link(rel     := "stylesheet", href  := "/__/static/css/materialize.min.css"),
         link(rel     := "stylesheet", href  := "/__/static/font/google-fonts-icon.css"),
         script(src   := "/__/static/js/materialize.min.js"),
-        tags2.title(displayedDir)
+        tags2.title(simpleDirName)
       ),
       body(
         style := "padding: 0 1em 0 1em;",
-        h6(s"Index of $displayedDir"),
+        h6(s"Index of $simpleDirName"),
         table(
           cls := "striped",
-          tr(th("Name"), th("Size"), th("Last Modified"), th("Type")),
+          tableHeaderOf(sortBy),
           if (path != root) tr(td(a(href := "../", "../"))) else tr(),
           tbody(trs)
         )
@@ -109,9 +107,21 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
     )
   }
 
-  // 将路径中的每个部分进行 URL 编码，避免 x/y/z -> x%2Fy%2Fz
-  private def urlEncodePath(path: NioPath): String =
-    path.toString.split("/").map(java.net.URLEncoder.encode(_, StandardCharsets.UTF_8)).mkString("/")
+  def tableHeaderOf(sortBy: SortBy): TypedTag[String] = {
+    val arrow                    = sortBy.order match
+      case SortOrder.Asc  => "▲"
+      case SortOrder.Desc => "▼"
+    def thOf(column: SortColumn) =
+      th(
+        a(
+          href := s"?sort=$column:${if sortBy.column == column && sortBy.order == SortOrder.Asc then SortOrder.Desc else SortOrder.Asc}",
+          column.toString + (if sortBy.column == column then arrow else "")
+        )
+      )
+    tr(
+      List(SortColumn.Name, SortColumn.Type, SortColumn.Size, SortColumn.LastModified, SortColumn.LastAccess, SortColumn.Creation).map(thOf)
+    )
+  }
 
   val routes: HttpRoutes[F] = statusR <+> mainR
 

@@ -5,4 +5,4 @@ do
   kill -9 $p
 done
 
- mill -w app.run .
+ mill -w app.runBackground .
