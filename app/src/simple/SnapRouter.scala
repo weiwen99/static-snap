@@ -9,11 +9,17 @@ import com.typesafe.scalalogging.StrictLogging
 import fs2.io.file.{Files, Path => Fs2Path}
 import org.http4s._
 import org.http4s.dsl.Http4sDsl
+import org.http4s.dsl.impl.OptionalQueryParamDecoderMatcher
 import org.http4s.headers.{`Accept-Ranges`, `Content-Type`}
 import scalatags.Text.*
 import scalatags.Text.all.*
 
 import simple.FileMeta.*
+
+given QueryParamDecoder[SortBy] =
+  QueryParamDecoder[String].emap(s => SortBy.parseString(s).leftMap(t => ParseFailure(t, t)))
+
+object OptionalSortByQueryParamMatcher extends OptionalQueryParamDecoderMatcher[SortBy]("sort")
 
 /** @param root
   *   提供服务的文件系统根目录
