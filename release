@@ -1,0 +1,81 @@
+#!/usr/bin/env sh
+
+set -e
+
+RELEASE_VERSION=""
+
+NEXT_BUMP="patch"
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -v|--version)
+      RELEASE_VERSION="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    -b|--bump)
+      if [[ $2 == 'patch' || $2 == 'minor' || $2 == 'major' ]]; then
+        NEXT_BUMP="$2";
+      fi
+      shift # past argument
+      shift # past value
+      ;;
+    -*|--*)
+      echo "Unknown option $1"
+      exit 1
+      ;;
+    *)
+      shift # past argument
+      ;;
+  esac
+done
+
+echo "release process started."
+
+# 格式化 Scala 代码
+mill __.reformat
+echo "code reformated."
+
+mill clean
+
+mill __.test
+
+if [[ $RELEASE_VERSION != "" ]]; then
+  # 设置 release 版本。这个版本号会写入 version 文件。
+  mill versionFile.setVersion --version $RELEASE_VERSION
+else
+  # 设置 release 版本。这个版本号会写入 version 文件。
+  # 例如，如果当前版本是 0.1.0-SNAPSHOT，那么设置 release 版本后，version 文件的内容会变成 0.1.0
+  mill versionFile.setReleaseVersion
+  # 读取 version 文件中的发布版本号, 去掉双引号
+  RELEASE_VERSION=$(mill show versionFile.currentVersion | awk -F'"' '{print $2}')
+fi
+
+TAG=v$RELEASE_VERSION
+
+echo "set release version to $RELEASE_VERSION, git tag to $TAG"
+
+git commit -am "release $TAG"
+git tag -f $TAG
+git push -f origin
+git push origin -f $TAG
+
+mill versionFile.setNextVersion --bump $NEXT_BUMP
+
+# 读取 version 文件中的下一个版本号, 去掉双引号
+NEXT_VERSION=$(mill show versionFile.currentVersion | awk -F'"' '{print $2}')
+TAG=v$NEXT_VERSION
+
+echo "set version to $NEXT_VERSION, git tag to $TAG ."
+
+git commit -am "snapshot version $TAG"
+git tag -f $TAG
+git push -f origin $TAG
+git push -f
+
+echo "release completed. the released version is $RELEASE_VERSION, next version is $NEXT_VERSION."
+echo "check https://github.com/weiwen99/static-snap/actions for build status."
+echo "check https://github.com/weiwen99/static-snap/releases for draft release status."
+echo "the release will be available for download after the build is completed (it might take a few minutes)."
+
+exit 0

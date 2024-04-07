@@ -1,13 +1,10 @@
-name: Scala Mill CI
+name: Scala CI
 
 on:
   push:
     branches: [ "*" ]
   pull_request:
     branches: [ "main" ]
-
-permissions:
-  contents: read
 
 jobs:
 
@@ -25,12 +22,12 @@ jobs:
         java-version: '22'
         distribution: 'temurin'
 
-    - uses: jodersky/setup-mill@master
-      with:
-        mill-version: 0.11.7
-
-    - name: Compile
-      run: mill __.compile
+    - name: Setup Mill
+      run: |
+        mkdir -pv ~/.local/bin
+        curl -L https://github.com/com-lihaoyi/mill/releases/download/0.11.7/0.11.7 > ~/.local/bin/mill
+        chmod +x ~/.local/bin/mill
+        echo "export PATH=\$HOME/.local/bin:\$PATH" >> $GITHUB_PATH
 
     - name: Test
       run: mill __.test
