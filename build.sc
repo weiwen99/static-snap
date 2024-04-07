@@ -1,6 +1,8 @@
+import $ivy.`com.lihaoyi::mill-contrib-versionfile:`
 import $ivy.`io.github.hoangmaihuy::mill-universal-packager::0.1.2`
 import io.github.hoangmaihuy.mill.packager.archetypes.JavaAppPackagingModule
 import mill._
+import mill.contrib.versionfile.VersionFileModule
 import mill.scalalib.scalafmt.ScalafmtModule
 import scalalib._
 
@@ -13,6 +15,10 @@ object Versions {
   val logbackClassicV = "1.4.14"
   val scalatestV      = "3.2.18"
   val oslibV          = "0.9.3"
+}
+
+object versionFile extends VersionFileModule {
+  def millSourcePath = millOuterCtx.millSourcePath
 }
 
 // add GraalVM native-image support, use `mill {subproject}.graalvmNativeImage` to generate native image
@@ -69,14 +75,23 @@ object app extends ScalaModule with ScalafmtModule with JavaAppPackagingModule w
     Seq(coursier.maven.MavenRepository("http://maven.aliyun.com/")) ++ super.repositoriesTask()
   }
 
+  // Simple Scala Static Snap Server: s5
+  val appName = "s5"
+
   // Define the main class
   def mainClass = Some("simple.Main")
+
+  def executableScriptName = T(appName)
+
+  def packageName: T[String] = appName + "-" + packageVersion()
+
+  def maintainer: T[String] = "weiwen99 <weiwen@weiwen.org>"
 
   // Define the top-level directory name for the archived package
   def topLevelDirectory = Some(packageName())
 
   // Define the version of the package
-  def packageVersion = "0.0.1-SNAPSHOT"
+  def packageVersion = T { "v" + versionFile.currentVersion().toString }
 
   def scalacOptions = Seq(
     "-deprecation",
@@ -120,6 +135,5 @@ object app extends ScalaModule with ScalafmtModule with JavaAppPackagingModule w
     )
   )
 
-  // Simple Scala Static Snap Server: s5
-  def graalvmExecutableScriptName: T[String] = T("s5")
+  def graalvmExecutableScriptName: T[String] = T(appName)
 }

@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+    # Push events to matching v*, i.e. v1.0, v20.15.10
+    - 'v*'
+    # Ignore push events to matching v*-SNAPSHOT， uncomment this line if you want to ignore push events to matching v*-SNAPSHOT
+    # - '!v*-SNAPSHOT'
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v4
+
+    - uses: graalvm/setup-graalvm@v1
+      with:
+        java-version: '22'
+        distribution: 'graalvm-community'
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup Mill
+      run: |
+        mkdir -pv ~/.local/bin
+        curl -L https://github.com/com-lihaoyi/mill/releases/download/0.11.7/0.11.7 > ~/.local/bin/mill
+        chmod +x ~/.local/bin/mill
+        echo "export PATH=\$HOME/.local/bin:\$PATH" >> $GITHUB_PATH
+
+    - name: Get Version
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
+
+    - name: Test
+      run: mill __.test
+
+    # to cache the stage directory for the next step
+    - name: Universal Staging
+      run: mill app.universalStage
+
+    - name: Build Universal Packages
+      run: |
+        mill app.universalStagePackageTarZstd
+        mill app.universalStagePackageTarBzip2
+        mill app.universalStagePackageTarGzip
+
+    - name: Build GraalVM Native Image
+      run: |
+        mill app.graalvmNativeImage
+        cd out/app/graalvmNativeImage.dest/
+        tar jcpvf s5-graalvm-native-image-${{ steps.get_version.outputs.VERSION }}.tar.bz2 s5
+
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      with:
+        draft: true
+        files: |
+          out/app/universalStagePackageTarZstd.dest/s5-${{ steps.get_version.outputs.VERSION }}.tar.zstd
+          out/app/universalStagePackageTarBzip2.dest/s5-${{ steps.get_version.outputs.VERSION }}.tar.bz2
+          out/app/universalStagePackageTarGzip.dest/s5-${{ steps.get_version.outputs.VERSION }}.tar.gz
+          out/app/graalvmNativeImage.dest/s5-graalvm-native-image-${{ steps.get_version.outputs.VERSION }}.tar.bz2
