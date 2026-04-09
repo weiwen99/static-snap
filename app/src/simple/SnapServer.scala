@@ -1,13 +1,15 @@
 package simple
 
-import cats.effect._
+import scala.concurrent.duration.*
+
+import cats.effect.*
 import cats.effect.kernel.Async
 import com.comcast.ip4s.{Host, Port}
 import fs2.io.net.Network
 import org.http4s.HttpRoutes
 import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.{Router, Server}
-import org.http4s.server.staticcontent._
+import org.http4s.server.staticcontent.*
 
 object SnapServer {
 
@@ -20,7 +22,7 @@ object SnapServer {
       .withHost(host)
       .withPort(port)
       .withHttp2
+      .withShutdownTimeout(3.seconds)
       .build
-
   }
 }

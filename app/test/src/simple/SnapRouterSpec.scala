@@ -63,4 +63,21 @@ class SnapRouterSpec extends AnyWordSpec with should.Matchers with BeforeAndAfte
     }
   }
 
+  "Markdown Markdeep rendering" should {
+    val mdContent = "# Hello\nThis is **markdown**."
+    val mdFile    = s"$dir1/test.md"
+
+    "render .md files with Markdeep footer" in {
+      os.write(os.Path(mdFile), mdContent)
+      val router = SnapRouter[IO](Paths.get(dir1), "_")
+      val actual = router.routes.orNotFound.run(Request[IO](GET, uri"/test.md")).unsafeRunSync()
+      actual.status shouldBe Ok
+      actual.headers.get(CIString("content-type")).map(_.head.value) shouldBe "text/html; charset=UTF-8".some
+      val body   = actual.as[String].unsafeRunSync()
+      body should include(mdContent)
+      body should include("markdeep.min.js")
+      body should include("journal.css")
+    }
+  }
+
 }

@@ -59,9 +59,22 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
       case n if !n.toAbsolutePath().startsWith(root) => Forbidden()
       // 如果是目录，列出目录内容
       case n if (java.nio.file.Files.isDirectory(n)) => Ok(listDir(nioPath, sortBy))
+      // 如果是 .md 文件，使用 Markdeep 渲染
+      case n if n.toString.endsWith(".md")           => serveMarkdown(n)
       // 如果是文件，返回文件内容
       case n                                         => serveFile(n, request.some)
     }
+  }
+
+  private val MarkdeepStylesheet: String =
+    """<meta charset="utf-8" emacsmode="-*- markdown -*-"><link rel="stylesheet" href="https://casual-effects.com/markdeep/latest/journal.css?">"""
+
+  private val MarkdeepFooter: String =
+    """<!-- Markdeep: --><style class="fallback">body{visibility:hidden;white-space:pre;font-family:monospace}</style><script src="https://casual-effects.com/markdeep/latest/markdeep.min.js" charset="utf-8"></script><script>window.alreadyProcessedMarkdeep||(document.body.style.visibility="visible")</script>"""
+
+  private def serveMarkdown(path: NioPath): F[Response[F]] = {
+    val content = new String(java.nio.file.Files.readAllBytes(path), StandardCharsets.UTF_8)
+    Ok(MarkdeepStylesheet + "\n" + content + "\n" + MarkdeepFooter, `Content-Type`(MediaType.text.html, Charset.`UTF-8`))
   }
 
   private def serveFile(path: NioPath, req: Option[Request[F]]) =

@@ -94,6 +94,8 @@ object app extends ScalaModule with ScalafmtModule with ScalafixModule with Java
 
   val appName = "s5"
 
+  override def artifactName: T[String] = appName
+
   def mainClass = Some("simple.Main")
 
   def packageVersion: T[String] = Task { "v" + versionFile.currentVersion().toString }
@@ -118,7 +120,6 @@ object app extends ScalaModule with ScalafmtModule with ScalafixModule with Java
     mvn"org.http4s::http4s-dsl:$http4sV",
     mvn"com.lihaoyi::scalatags:$scalatagsV",
     mvn"com.monovore::decline:$declineV",
-    mvn"com.monovore::decline-effect:$declineV",
     mvn"com.typesafe.scala-logging::scala-logging:$scalaloggingV",
     mvn"ch.qos.logback:logback-classic:$logbackClassicV"
   )
@@ -139,4 +140,18 @@ object app extends ScalaModule with ScalafmtModule with ScalafixModule with Java
     "--initialize-at-build-time=scala.runtime.Statics$",
     "-H:IncludeResources=.*/(.*.css)|(.*.js)$"
   )
+
+  override def assembly: T[PathRef] = Task {
+    val original = super.assembly()
+    val target   = Task.dest / s"$appName.jar"
+    os.copy(original.path, target, replaceExisting = true)
+    PathRef(target)
+  }
+
+  override def nativeImage: T[PathRef] = Task {
+    val original = super.nativeImage()
+    val target   = Task.dest / appName
+    os.copy(original.path, target, replaceExisting = true)
+    PathRef(target)
+  }
 }
