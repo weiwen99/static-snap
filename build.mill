@@ -1,0 +1,142 @@
+//| mvnDeps:
+//| - "com.lihaoyi::mill-contrib-versionfile:$MILL_VERSION"
+//| - "com.goyeau::mill-scalafix::0.6.0"
+//| mill-jvm-opts: []
+//| jvmVersion: graalvm-community:25.0.1
+
+package build
+
+import com.goyeau.mill.scalafix.ScalafixModule
+import mill.*
+import mill.contrib.versionfile.VersionFileModule
+import mill.scalalib.scalafmt.ScalafmtModule
+import scalalib.*
+
+object Versions {
+  val scalaV          = "3.8.3"
+  val http4sV         = "0.23.33"
+  val declineV        = "2.5.0"
+  val scalatagsV      = "0.13.1"
+  val scalaloggingV   = "3.9.5"
+  val logbackClassicV = "1.5.32"
+  val scalatestV      = "3.2.19"
+  val oslibV          = "0.11.8"
+}
+
+object versionFile extends VersionFileModule
+
+trait PackagerModule extends JavaModule {
+  def packageName: T[String]    = artifactName() + "-" + packageVersion()
+  def packageVersion: T[String]
+}
+
+trait UniversalPackagerModule extends PackagerModule {
+  def universalSources: T[PathRef] = Task.Source(moduleDir / "universal")
+
+  def universalMappings: Task[Seq[(PathRef, os.SubPath)]] = Task.Anon {
+    val sourceDirectory = universalSources().path
+    if (os.exists(sourceDirectory)) {
+      os.walk(sourceDirectory).map { source =>
+        PathRef(source) -> source.subRelativeTo(sourceDirectory)
+      }
+    } else {
+      Seq.empty
+    }
+  }
+
+  def universalStage: T[PathRef] = Task {
+    os.remove.all(Task.dest)
+    universalMappings().foreach { case (f, p) =>
+      os.copy(
+        from = f.path,
+        to = os.Path(p, Task.dest),
+        createFolders = true,
+        followLinks = true,
+        replaceExisting = true,
+        mergeFolders = true
+      )
+    }
+    PathRef(Task.dest)
+  }
+}
+
+trait JavaAppPackagingModule extends UniversalPackagerModule { self: ScalaModule =>
+
+  def classpathMappings: T[Seq[(PathRef, os.SubPath)]] = Task {
+    val selfJar        = jar()
+    val selfMapping    = Seq(selfJar -> (os.sub / "lib" / (artifactName() + ".jar")))
+    val moduleMappings = Task.traverse(transitiveModuleDeps.distinct) { module =>
+      Task.Anon {
+        val jarRef = module.jar()
+        jarRef -> (os.sub / "lib" / (module.artifactName() + ".jar"))
+      }
+    }()
+    val mvnMappings    = resolvedRunMvnDeps().map { mvnDep =>
+      mvnDep -> (os.sub / "lib" / mvnDep.path.last)
+    }
+    selfMapping ++ moduleMappings ++ mvnMappings
+  }
+
+  override def universalMappings = Task {
+    super.universalMappings() ++ classpathMappings()
+  }
+}
+
+object app extends ScalaModule with ScalafmtModule with ScalafixModule with JavaAppPackagingModule with NativeImageModule {
+
+  import Versions.*
+
+  def scalaVersion = scalaV
+
+  def repositoriesTask = Task.Anon {
+    Seq(coursier.maven.MavenRepository("http://maven.aliyun.com/")) ++ super.repositoriesTask()
+  }
+
+  val appName = "s5"
+
+  def mainClass = Some("simple.Main")
+
+  def packageVersion: T[String] = Task { "v" + versionFile.currentVersion().toString }
+
+  def maintainer: T[String] = Task { "weiwen99 <weiwen@weiwen.org>" }
+
+  def topLevelDirectory: T[Option[String]] = Task { Some(packageName()) }
+
+  def executableScriptName: T[String] = Task { appName }
+
+  def scalacOptions = Seq(
+    "-deprecation",
+    "-encoding",
+    "UTF-8",
+    "-feature",
+    "-unchecked",
+    "-Wunused:all"
+  )
+
+  def mvnDeps = Seq(
+    mvn"org.http4s::http4s-ember-server:$http4sV",
+    mvn"org.http4s::http4s-dsl:$http4sV",
+    mvn"com.lihaoyi::scalatags:$scalatagsV",
+    mvn"com.monovore::decline:$declineV",
+    mvn"com.monovore::decline-effect:$declineV",
+    mvn"com.typesafe.scala-logging::scala-logging:$scalaloggingV",
+    mvn"ch.qos.logback:logback-classic:$logbackClassicV"
+  )
+
+  object test extends ScalaTests with TestModule.ScalaTest {
+
+    def mvnDeps = Seq(
+      mvn"org.scalatest::scalatest:$scalatestV",
+      mvn"com.lihaoyi::os-lib:$oslibV"
+    )
+  }
+
+  def jvmVersion = "graalvm-community:25.0.1"
+
+  override def nativeImageOptions: T[Seq[String]] = super.nativeImageOptions() ++ Seq(
+    "--no-fallback",
+    "--initialize-at-build-time=scala.runtime.LazyVals$",
+    "--initialize-at-build-time=scala.runtime.Statics$",
+    "-H:IncludeResources=.*/(.*.css)|(.*.js)$"
+  )
+}

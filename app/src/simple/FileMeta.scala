@@ -39,7 +39,7 @@ final case class FileMeta(root: Path, path: Path) {
   val relativeToRoot: Path        = root.relativize(path)
 
   // 文件大小，单位 Byte
-  val size = attrs.size()
+  val size: Long = attrs.size()
 
   // 人类可读的文件大小
   val humanSize: String = size match {

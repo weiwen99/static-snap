@@ -41,7 +41,7 @@ class SnapRouter[F[_]: Async: Files](root: NioPath, metaPrefix: String) extends 
       .withContentType(`Content-Type`(MediaType.text.html, Charset.`UTF-8`))
 
   // 元信息 API
-  private val statusR = HttpRoutes.of[F] { case request @ GET -> Root / META_PREFIX / "status" =>
+  private val statusR = HttpRoutes.of[F] { case GET -> Root / META_PREFIX / "status" =>
     Ok("simple static server is running.\n")
   }
 
